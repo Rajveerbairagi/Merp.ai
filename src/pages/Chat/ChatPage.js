@@ -11,8 +11,16 @@ function ChatPage({ user, onLogout }) {
 
   useEffect(() => {
     const storedSessions = JSON.parse(localStorage.getItem('chatSessions')) || [];
-    setChatSessions(storedSessions);
-    if (storedSessions.length > 0) {
+    if (storedSessions.length === 0) {
+      const defaultChat = {
+        title: 'Chat 1',
+        messages: [{ role: 'bot', content: 'Hey there! How can I help you today?' }],
+      };
+      setChatSessions([defaultChat]);
+      setCurrentChatIndex(0);
+      localStorage.setItem('chatSessions', JSON.stringify([defaultChat]));
+    } else {
+      setChatSessions(storedSessions);
       setCurrentChatIndex(storedSessions.length - 1);
     }
   }, []);
@@ -25,7 +33,7 @@ function ChatPage({ user, onLogout }) {
     updateSessions([...chatSessions, newChat], chatSessions.length);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!input.trim()) return;
 
     let updatedSessions = [...chatSessions];
@@ -34,12 +42,36 @@ function ChatPage({ user, onLogout }) {
 
     const userMessage = { role: 'user', content: input };
     updatedSessions[currentChatIndex].messages.push(userMessage);
+    setChatSessions(updatedSessions); // Update UI immediately with user message
 
-    // Placeholder bot response (for demo, backend dev will replace this)
-    const botReply = { role: 'bot', content: `Cool! You said "${input}". What’s next?` };
-    updatedSessions[currentChatIndex].messages.push(botReply);
+    try {
+      // API call to the backend chatbot
+      const response = await fetch('http://localhost:5000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: input,
+          chatId: currentChatIndex,
+          userId: user.email,
+        }),
+      });
 
-    updateSessions(updatedSessions, currentChatIndex);
+      const data = await response.json();
+      const botReply = { role: 'bot', content: data.reply };
+
+      updatedSessions = [...chatSessions];
+      updatedSessions[currentChatIndex].messages.push(botReply);
+      updateSessions(updatedSessions, currentChatIndex);
+    } catch (error) {
+      console.error('Chat API error:', error);
+      const errorReply = { role: 'bot', content: 'Oops! Something went wrong. Try again!' };
+      updatedSessions = [...chatSessions];
+      updatedSessions[currentChatIndex].messages.push(errorReply);
+      updateSessions(updatedSessions, currentChatIndex);
+    }
+
     setInput('');
     scrollToBottom();
   };
